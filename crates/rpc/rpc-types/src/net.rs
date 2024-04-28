@@ -2,7 +2,8 @@ use crate::{pk_to_id, PeerId};
 use alloy_primitives::B256;
 use alloy_rlp::{RlpDecodable, RlpEncodable};
 use alloy_rpc_types::admin::EthProtocolInfo;
-// use enr::Enr;
+use enr::Enr;
+use k256::SecretKey;
 // use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -194,28 +195,28 @@ impl FromStr for NodeRecord {
     }
 }
 
-// impl TryFrom<&Enr<SecretKey>> for NodeRecord {
-//     type Error = NodeRecordParseError;
+impl TryFrom<&Enr<SecretKey>> for NodeRecord {
+    type Error = NodeRecordParseError;
 
-//     fn try_from(enr: &Enr<SecretKey>) -> Result<Self, Self::Error> {
-//         let Some(address) = enr.ip4().map(IpAddr::from).or_else(|| enr.ip6().map(IpAddr::from))
-//         else {
-//             return Err(NodeRecordParseError::InvalidUrl("ip missing".to_string()))
-//         };
+    fn try_from(enr: &Enr<SecretKey>) -> Result<Self, Self::Error> {
+        let Some(address) = enr.ip4().map(IpAddr::from).or_else(|| enr.ip6().map(IpAddr::from))
+        else {
+            return Err(NodeRecordParseError::InvalidUrl("ip missing".to_string()))
+        };
 
-//         let Some(udp_port) = enr.udp4().or_else(|| enr.udp6()) else {
-//             return Err(NodeRecordParseError::InvalidUrl("udp port missing".to_string()))
-//         };
+        let Some(udp_port) = enr.udp4().or_else(|| enr.udp6()) else {
+            return Err(NodeRecordParseError::InvalidUrl("udp port missing".to_string()))
+        };
 
-//         let Some(tcp_port) = enr.tcp4().or_else(|| enr.tcp6()) else {
-//             return Err(NodeRecordParseError::InvalidUrl("tcp port missing".to_string()))
-//         };
+        let Some(tcp_port) = enr.tcp4().or_else(|| enr.tcp6()) else {
+            return Err(NodeRecordParseError::InvalidUrl("tcp port missing".to_string()))
+        };
 
-//         let id = pk_to_id(&enr.public_key().serialize_uncompressed());
+        let id = pk_to_id(&enr.public_key().serialize_uncompressed());
 
-//         Ok(NodeRecord { address, tcp_port, udp_port, id }.into_ipv4_mapped())
-//     }
-// }
+        Ok(NodeRecord { address, tcp_port, udp_port, id }.into_ipv4_mapped())
+    }
+}
 
 #[cfg(test)]
 mod tests {
