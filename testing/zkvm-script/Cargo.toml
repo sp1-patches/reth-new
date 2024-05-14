@@ -12,7 +12,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-reth-primitives = { path = "../../crates/primitives", default-features = false}
+reth-primitives = { path = "../../crates/primitives", default-features = false, features = ["alloy-compat"]}
 reth-consensus.workspace = true
 reth-interfaces = { path = "../../crates/interfaces", default-features = false }
 reth-evm.workspace = true
@@ -21,3 +21,9 @@ alloy-rpc-types.workspace = true
 alloy-provider.workspace = true
 url.workspace = true
 reth-revm.workspace = true
+reth-provider.workspace = true
+reth-node-ethereum.workspace = true
+revm-primitives.workspace = true
+eyre.workspace = true
+serde_json.workspace = true
+reth-trie.workspace = true

@@ -10752,12 +10752,18 @@ version = "0.2.0-beta.7"
 dependencies = [
  "alloy-provider",
  "alloy-rpc-types 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=f1d7085)",
+ "eyre",
  "reth-consensus",
  "reth-evm",
  "reth-interfaces",
+ "reth-node-ethereum",
  "reth-primitives",
+ "reth-provider",
  "reth-revm",
+ "reth-trie",
  "revm",
+ "revm-primitives",
+ "serde_json",
  "url",
 ]
 
