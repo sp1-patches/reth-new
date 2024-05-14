@@ -15,6 +15,8 @@ use reth_primitives::{
 use reth_trie::{proof::Proof, updates::TrieUpdates, HashedPostState};
 use revm::db::BundleState;
 
+// TODO: impl StateProviderRef::new(alloy_provider::Provider)
+
 /// State provider over latest state that takes tx reference.
 #[derive(Debug)]
 pub struct LatestStateProviderRef<'b, TX: DbTx> {

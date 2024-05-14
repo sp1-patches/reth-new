@@ -93,6 +93,7 @@ members = [
     "testing/ef-tests/",
     "testing/testing-utils",
     "testing/zkvm",
+    "testing/zkvm-script"
 ]
 default-members = ["bin/reth"]
 
