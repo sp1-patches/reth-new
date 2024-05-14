@@ -10,7 +10,8 @@ use reth_provider::{
 use reth_trie::updates::TrieUpdates;
 
 pub struct RpcDb {
-    pub provider: ReqwestProvider, // TODO: make this a "Provider"
+    // TODO: make this a general "Provider" trait from alloy_provider.
+    pub provider: ReqwestProvider,
     pub block: BlockId,
 }
 
@@ -66,5 +67,3 @@ impl StateRootProvider for RpcDb {
         todo!();
     }
 }
-
-// TODO: implement BlockReader for RpcDb
