@@ -1,12 +1,11 @@
+#[allow(unused_imports)]
 use alloy_provider::{Provider, ReqwestProvider};
 use reth_interfaces::provider::ProviderResult;
 use reth_primitives::{
-    trie::AccountProof, Account, Address, BlockHash, BlockId, BlockNumHash, BlockNumber,
-    BlockNumberOrTag, Bytecode, StorageKey, StorageValue, B256, KECCAK_EMPTY, U256,
+    trie::AccountProof, Account, Address, BlockId, BlockNumber, Bytecode, StorageKey, StorageValue,
+    B256,
 };
-use reth_provider::{
-    AccountReader, BlockHashReader, BlockReader, StateProvider, StateRootProvider,
-};
+use reth_provider::{AccountReader, BlockHashReader, StateProvider, StateRootProvider};
 use reth_trie::updates::TrieUpdates;
 
 pub struct RpcDb {

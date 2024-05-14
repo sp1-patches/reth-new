@@ -4,29 +4,30 @@ mod witness;
 
 use crate::{provider_db::RpcDb, witness::WitnessDb};
 
-use alloy_provider::{Provider, ReqwestProvider};
 use alloy_rpc_types::{Block, BlockId, EIP1186AccountProofResponse};
 use eyre::Ok;
 use reth_evm::execute::{BlockExecutionOutput, BlockExecutorProvider, Executor};
 use reth_interfaces::executor::BlockValidationError;
-use reth_node_ethereum::EthereumNode;
 use reth_primitives::{Block as RethBlock, ChainSpecBuilder, Receipts, B256, MAINNET};
 use reth_provider::{BundleStateWithReceipts, ProviderError};
-use reth_revm::database::StateProviderDatabase;
-use revm::{db::InMemoryDB, Database};
-use revm_primitives::{AccountInfo, HashMap, U256};
+use revm_primitives::U256;
 use url::Url;
 
+/// A struct that holds the input for a zkVM program to execute a block.
 pub struct SP1Input {
-    // The block that will be executed inside the zkVM.
+    /// The block that will be executed inside the zkVM program.
     pub block: RethBlock,
-    // Used for initializing the WitnessDB inside the zkVM program.
+    /// Used forinitializing the WitnessDB inside the zkVM program.
     pub merkle_proofs: Vec<EIP1186AccountProofResponse>,
-    // Code
+    /// A vector of contract bytecode of the same length as [`merkle_proofs`].
     pub code: Vec<Vec<u8>>,
 }
 
 async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
+    // We put imports here that are not used in the zkVM program.
+    use alloy_provider::{Provider, ReqwestProvider};
+    use reth_revm::database::StateProviderDatabase;
+
     let merkle_block_td = U256::from(0);
 
     // Initialize a provider.
@@ -100,6 +101,8 @@ fn verify_stf(sp1_input: SP1Input) -> eyre::Result<()> {
     let merkle_block_td = U256::from(0); // TODO: this should be an input?
 
     let witness_db = WitnessDb::new(sp1_input.block.header.state_root, sp1_input.merkle_proofs);
+
+    // TODO: can we import `EthExecutorProvider` from reth-evm instead of reth-node-ethereum?
     let executor = reth_node_ethereum::EthExecutorProvider::ethereum(chain_spec.clone().into())
         .executor(witness_db);
     let BlockExecutionOutput { state, receipts, .. } = executor.execute(

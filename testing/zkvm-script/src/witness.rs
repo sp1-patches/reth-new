@@ -1,23 +1,17 @@
-use alloy_provider::{Provider, ReqwestProvider};
-use alloy_rpc_types::{Block, BlockId, EIP1186AccountProofResponse};
-use eyre::Ok;
-use reth_evm::execute::{BlockExecutionOutput, BlockExecutorProvider, Executor};
-use reth_interfaces::executor::BlockValidationError;
-use reth_node_ethereum::EthereumNode;
-use reth_primitives::{Block as RethBlock, ChainSpecBuilder, Receipts, B256, MAINNET};
-use reth_provider::{BundleStateWithReceipts, ProviderError};
-use reth_revm::database::StateProviderDatabase;
+use alloy_rpc_types::EIP1186AccountProofResponse;
+use reth_primitives::B256;
+// TODO: we need to be able to import `ProviderError` from `reth_provider` in the zkVM.
+use reth_provider::ProviderError;
 use revm::{db::InMemoryDB, Database};
-use revm_primitives::{AccountInfo, HashMap, U256};
-use url::Url;
+use revm_primitives::AccountInfo;
 
-pub struct WitnessDb {
-    pub inner: InMemoryDB,
-    pub state_root: B256,
+pub(crate) struct WitnessDb {
+    pub(crate) inner: InMemoryDB,
+    pub(crate) state_root: B256,
 }
 
 impl WitnessDb {
-    pub fn new(state_root: B256, merkle_proofs: Vec<EIP1186AccountProofResponse>) -> Self {
+    pub(crate) fn new(state_root: B256, merkle_proofs: Vec<EIP1186AccountProofResponse>) -> Self {
         let mut inner = InMemoryDB::default();
         for proof in merkle_proofs {
             // TODO: verify proof against state_root
