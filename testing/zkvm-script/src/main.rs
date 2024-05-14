@@ -20,44 +20,13 @@ use url::Url;
 pub struct SP1Input {
     // The block that will be executed inside the zkVM.
     pub block: RethBlock,
-    // Used for initializing the InMemoryDB inside the zkVM program.
+    // Used for initializing the WitnessDB inside the zkVM program.
     pub merkle_proofs: Vec<EIP1186AccountProofResponse>,
     // Code
     pub code: Vec<Vec<u8>>,
 }
 
-// TODO: is there some automatic way to implement this?
-// TODO: fix all the dummy ProviderError
-impl Database for WitnessDb {
-    type Error = ProviderError;
-
-    fn basic(
-        &mut self,
-        address: revm_primitives::Address,
-    ) -> Result<Option<AccountInfo>, Self::Error> {
-        self.inner.basic(address).map_err(|_| ProviderError::UnsupportedProvider)
-    }
-
-    fn code_by_hash(&mut self, code_hash: B256) -> Result<revm_primitives::Bytecode, Self::Error> {
-        self.inner.code_by_hash(code_hash).map_err(|_| ProviderError::UnsupportedProvider)
-    }
-
-    fn storage(
-        &mut self,
-        address: revm_primitives::Address,
-        index: revm_primitives::U256,
-    ) -> Result<revm_primitives::U256, Self::Error> {
-        self.inner.storage(address, index).map_err(|_| ProviderError::UnsupportedProvider)
-    }
-
-    fn block_hash(&mut self, number: revm_primitives::U256) -> Result<B256, Self::Error> {
-        self.inner.block_hash(number).map_err(|_| ProviderError::UnsupportedProvider)
-    }
-}
-
-async fn execute() -> eyre::Result<()> {
-    let block_number = 1000u64;
-    let rpc_url = Url::parse("https://example.net").expect("Invalid RPC URL");
+async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
     let merkle_block_td = U256::from(0);
 
     // Initialize a provider.
@@ -100,18 +69,36 @@ async fn execute() -> eyre::Result<()> {
         block.header.number,
     );
 
-    // TODO: how do we compute the new state root here? Is there a way to do this incrementally?
-    // // Unpacked `BundleState::state_root_slow` function
-    // let (in_memory_state_root, in_memory_updates) =
-    //     block_state.hash_state_slow().state_root_with_updates(provider.tx_ref())?;
-
     let next_block = provider
         .get_block_by_number((block_number + 1).into(), false)
         .await?
         .ok_or(eyre::eyre!("next_block not found"))?;
 
-    // Now this is the program inside the zkVM.
+    // TODO: how do we compute the new state root here? Is there a way to do this incrementally?
+    // // Unpacked `BundleState::state_root_slow` function
+    // let (in_memory_state_root, in_memory_updates) =
+    //     block_state.hash_state_slow().state_root_with_updates(provider.tx_ref())?;
+    // TODO: check that the computed state_root matches the next_block.header.state_root
+
     let sp1_input = SP1Input { block: block.clone(), merkle_proofs: vec![], code: vec![] };
+    Ok(sp1_input)
+}
+
+/// Program that verifies the STF, run inside the zkVM.
+fn verify_stf(sp1_input: SP1Input) -> eyre::Result<()> {
+    let chain_spec = ChainSpecBuilder::default()
+        .chain(MAINNET.chain)
+        .genesis(
+            serde_json::from_str(include_str!(
+                "../../../crates/ethereum/node/tests/assets/genesis.json"
+            ))
+            .unwrap(),
+        )
+        .cancun_activated()
+        .build();
+    let block = sp1_input.block.clone();
+    let merkle_block_td = U256::from(0); // TODO: this should be an input?
+
     let witness_db = WitnessDb::new(sp1_input.block.header.state_root, sp1_input.merkle_proofs);
     let executor = reth_node_ethereum::EthExecutorProvider::ethereum(chain_spec.clone().into())
         .executor(witness_db);
@@ -131,9 +118,16 @@ async fn execute() -> eyre::Result<()> {
         block.header.number,
     );
 
-    // verify_against_header(db, finalized_state_root);
-
+    // TODO: either return or verify the resulting state root.
     Ok(())
 }
 
-fn main() {}
+#[tokio::main]
+async fn main() {
+    let block_number = 1000u64;
+    let rpc_url = Url::parse("https://example.net").expect("Invalid RPC URL");
+    // Get the input.
+    let sp1_input = get_input(block_number, rpc_url).await.expect("Failed to get input");
+    // Verify the STF.
+    verify_stf(sp1_input).expect("Failed to verify STF");
+}

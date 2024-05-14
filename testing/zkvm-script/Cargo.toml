@@ -27,3 +27,4 @@ revm-primitives.workspace = true
 eyre.workspace = true
 serde_json.workspace = true
 reth-trie.workspace = true
+tokio.workspace = true

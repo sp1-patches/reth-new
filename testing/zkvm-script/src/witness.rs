@@ -41,3 +41,32 @@ impl WitnessDb {
         Self { inner, state_root }
     }
 }
+
+// TODO: is there some automatic way to implement this?
+// TODO: fix all the dummy ProviderError
+impl Database for WitnessDb {
+    type Error = ProviderError;
+
+    fn basic(
+        &mut self,
+        address: revm_primitives::Address,
+    ) -> Result<Option<AccountInfo>, Self::Error> {
+        self.inner.basic(address).map_err(|_| ProviderError::UnsupportedProvider)
+    }
+
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<revm_primitives::Bytecode, Self::Error> {
+        self.inner.code_by_hash(code_hash).map_err(|_| ProviderError::UnsupportedProvider)
+    }
+
+    fn storage(
+        &mut self,
+        address: revm_primitives::Address,
+        index: revm_primitives::U256,
+    ) -> Result<revm_primitives::U256, Self::Error> {
+        self.inner.storage(address, index).map_err(|_| ProviderError::UnsupportedProvider)
+    }
+
+    fn block_hash(&mut self, number: revm_primitives::U256) -> Result<B256, Self::Error> {
+        self.inner.block_hash(number).map_err(|_| ProviderError::UnsupportedProvider)
+    }
+}
