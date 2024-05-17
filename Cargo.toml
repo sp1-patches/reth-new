@@ -301,13 +301,14 @@ alloy-rpc-types-beacon = { git = "https://github.com/alloy-rs/alloy", rev = "f1d
 alloy-genesis = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-node-bindings = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-provider = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085", default-features = false, features = [
-    "reqwest",
+    "reqwest"
 ] }
 alloy-eips = { git = "https://github.com/alloy-rs/alloy", default-features = false, rev = "f1d7085" }
 alloy-signer = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-signer-wallet = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-network = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-consensus = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
+alloy-transport-http = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 
 # misc
 auto_impl = "1"

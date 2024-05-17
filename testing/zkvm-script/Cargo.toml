@@ -18,7 +18,8 @@ reth-interfaces = { path = "../../crates/interfaces", default-features = false }
 reth-evm.workspace = true
 revm.workspace = true
 alloy-rpc-types.workspace = true
-alloy-provider.workspace = true
+alloy-provider = { workspace = true, features = ["reqwest"] }  
+alloy-transport-http.workspace = true
 url.workspace = true
 reth-revm.workspace = true
 reth-provider.workspace = true
@@ -28,3 +29,4 @@ eyre.workspace = true
 serde_json.workspace = true
 reth-trie.workspace = true
 tokio.workspace = true
+ethers-providers = "2.0.14"
