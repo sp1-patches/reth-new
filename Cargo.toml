@@ -284,7 +284,7 @@ reth-testing-utils = { path = "testing/testing-utils" }
 # revm
 revm = { version = "9.0.0", features = ["std", "secp256k1"], default-features = false }
 revm-primitives = { version = "4.0.0", features = ["std"], default-features = false }
-revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "ff0eca1" }
+revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "21a2db5" }
 
 # eth
 alloy-chains = "0.1.15"
@@ -292,7 +292,7 @@ alloy-primitives = "0.7.2"
 alloy-dyn-abi = "0.7.2"
 alloy-sol-types = "0.7.2"
 alloy-rlp = "0.3.4"
-alloy-trie = "0.3.1"
+alloy-trie = "0.4.0"
 alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-rpc-types-anvil = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
 alloy-rpc-types-trace = { git = "https://github.com/alloy-rs/alloy", rev = "f1d7085" }
