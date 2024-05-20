@@ -4,7 +4,6 @@ use alloy_rpc_types::{BlockId, EIP1186AccountProofResponse};
 use async_std::task;
 use futures::future::join_all;
 
-// use alloy_transport::TransportResult;
 use crate::RethBlock;
 use alloy_transport_http::ReqwestTransport;
 use reth_primitives::{
@@ -23,6 +22,32 @@ use std::{
 use tokio::{runtime::Handle, task::block_in_place};
 
 use crate::SP1Input;
+
+fn convert_proof(proof: EIP1186AccountProofResponse) -> AccountProof {
+    let address = proof.address;
+    let balance = proof.balance;
+    let code_hash = proof.code_hash;
+    let nonce = proof.nonce.as_limbs()[0];
+    let storage_hash = proof.storage_hash;
+    let account_proof = proof.account_proof;
+    let account_info = Account { nonce, balance, bytecode_hash: code_hash.into() };
+    let storage_proofs = proof.storage_proof.into_iter().map(|storage_proof| {
+        let key = storage_proof.key;
+        let value = storage_proof.value;
+        let proof = storage_proof.proof;
+        let mut sp = StorageProof::new(key.0.into());
+        sp.set_value(value);
+        sp.set_proof(proof);
+        sp
+    });
+    AccountProof {
+        address,
+        info: Some(account_info),
+        proof: account_proof,
+        storage_root: storage_hash.into(),
+        storage_proofs: storage_proofs.collect(),
+    }
+}
 
 #[derive(Clone, Debug)]
 /// An implementation of a [`DatabaseRef`] that uses an [`ReqwestProvider`] to fetch data.
@@ -147,8 +172,25 @@ impl RpcDb {
 
     pub async fn get_sp1_input(&self, block: &RethBlock) -> SP1Input {
         let proofs = self.get_proofs().await;
+        let converted_proofs: HashMap<_, _> = proofs
+            .iter()
+            .map(|(k, v)| {
+                let full_account_proof = FullAccountProof {
+                    account_proof: convert_proof(v.clone()),
+                    code: self
+                        .address_to_account_info
+                        .read()
+                        .unwrap()
+                        .get(k)
+                        .unwrap()
+                        .code
+                        .unwrap(),
+                };
+                (*k, full_account_proof)
+            })
+            .collect();
         let block_hashes = self.block_hashes.read().unwrap().clone();
-        SP1Input { block: block.clone(), address_to_proof: proofs, block_hashes }
+        SP1Input { block: block.clone(), address_to_proof: converted_proofs, block_hashes }
     }
 }
 

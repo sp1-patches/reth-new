@@ -15,34 +15,8 @@ use reth_primitives::{
 };
 use reth_provider::{BundleStateWithReceipts, ProviderError};
 use revm::{db::CacheDB, Database};
-use revm_primitives::{AccountInfo, HashMap, U256};
+use revm_primitives::{keccak256, AccountInfo, Bytecode, HashMap, U256};
 use url::Url;
-
-fn convert_proof(proof: EIP1186AccountProofResponse) -> AccountProof {
-    let address = proof.address;
-    let balance = proof.balance;
-    let code_hash = proof.code_hash;
-    let nonce = proof.nonce.as_limbs()[0];
-    let storage_hash = proof.storage_hash;
-    let account_proof = proof.account_proof;
-    let account_info = Account { nonce, balance, bytecode_hash: code_hash.into() };
-    let storage_proofs = proof.storage_proof.into_iter().map(|storage_proof| {
-        let key = storage_proof.key;
-        let value = storage_proof.value;
-        let proof = storage_proof.proof;
-        let mut sp = StorageProof::new(key.0.into());
-        sp.set_value(value);
-        sp.set_proof(proof);
-        sp
-    });
-    AccountProof {
-        address,
-        info: Some(account_info),
-        proof: account_proof,
-        storage_root: storage_hash.into(),
-        storage_proofs: storage_proofs.collect(),
-    }
-}
 
 #[derive(Debug, Clone)]
 /// A struct that holds the input for a zkVM program to execute a block.
@@ -50,9 +24,27 @@ pub struct SP1Input {
     /// The block that will be executed inside the zkVM program.
     pub block: RethBlock,
     /// Address to merkle proofs.
-    pub address_to_proof: HashMap<Address, EIP1186AccountProofResponse>,
+    pub address_to_proof: HashMap<Address, FullAccountProof>,
     /// Block number to block hash.
     pub block_hashes: HashMap<U256, B256>,
+}
+
+pub struct FullAccountProof {
+    account_proof: AccountProof,
+    code: Bytecode,
+}
+
+impl FullAccountProof {
+    fn verify(&self, state_root: B256) -> eyre::Result<()> {
+        self.account_proof.verify(state_root)?;
+        // Assert that the code hash matches the code.
+        // TODO: there is an optimization for EMPTY_CODE_HASH If the self.code is empty.
+        let code_hash = keccak256(&self.code.0);
+        if self.account_proof.info.unwrap().bytecode_hash.unwrap() != code_hash {
+            return Err(eyre::eyre!("Code hash does not match the code"));
+        }
+        Ok(())
+    }
 }
 
 async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
