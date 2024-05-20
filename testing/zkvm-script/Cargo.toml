@@ -30,3 +30,5 @@ serde_json.workspace = true
 reth-trie.workspace = true
 tokio.workspace = true
 ethers-providers = "2.0.14"
+alloy-transport = "0.0.0-reserved"
+async-std = "1.12.0"

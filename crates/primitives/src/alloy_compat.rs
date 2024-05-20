@@ -2,10 +2,11 @@
 
 use crate::{
     Block, Header, Transaction, TransactionSigned, TxEip1559, TxEip2930, TxEip4844, TxLegacy,
-    TxType,
+    TxType, U256,
 };
 use alloy_primitives::TxKind;
 use alloy_rlp::Error as RlpError;
+use alloy_rpc_types::Parity;
 
 impl TryFrom<alloy_rpc_types::Block> for Block {
     type Error = alloy_rpc_types::ConversionError;
@@ -21,6 +22,11 @@ impl TryFrom<alloy_rpc_types::Block> for Block {
                     .into_iter()
                     .map(|tx| {
                         let signature = tx.signature.ok_or(ConversionError::MissingSignature)?;
+                        let recovery_id = if signature.v > U256::from(1) {
+                            signature.v - U256::from(37)
+                        } else {
+                            signature.v
+                        };
                         Ok(TransactionSigned::from_transaction_and_signature(
                             tx.try_into()?,
                             crate::Signature {
@@ -28,7 +34,7 @@ impl TryFrom<alloy_rpc_types::Block> for Block {
                                 s: signature.s,
                                 odd_y_parity: signature
                                     .y_parity
-                                    .unwrap_or(alloy_rpc_types::Parity(false))
+                                    .unwrap_or(Parity(recovery_id == U256::from(1)))
                                     .0,
                             },
                         ))
