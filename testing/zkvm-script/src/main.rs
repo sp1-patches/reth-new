@@ -2,7 +2,6 @@
 pub mod cache;
 pub mod provider_db;
 pub mod witness;
-use async_std::task;
 
 use crate::{cache::CachedProvider, provider_db::RpcDb, witness::WitnessDb};
 
@@ -78,7 +77,6 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
         )
         .shanghai_activated()
         .build();
-    // let cache_provider = CachedProvider::new(provider, "cache.json".into());
 
     let prev_alloy_block = provider
         .get_block_by_number((block_number - 1).into(), true)
@@ -92,12 +90,6 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
         RpcDb::new(cache_provider.clone(), (block_number - 1).into(), prev_state_root.into());
     // The reason we can clone the provider_db is all the stateful elements are within Arcs.
     let db = CacheDB::new(provider_db.clone());
-
-    let address: Address = "0x4e68ccd3e89f51c3074ca5072bbac773960dfa36".parse().unwrap();
-    let account = task::block_on(provider_db.fetch_account_info(address));
-    // let account = provider_db.fetch_account_info(address).await;
-    println!("Account: {:?}", account);
-    // cache_provider.save();
 
     println!("Executing block with provider db...");
     let executor =
@@ -118,7 +110,6 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
         block.header.number,
     );
     println!("Done processing block!");
-    // cache_provider.save();
 
     // let _next_block = provider
     //     .get_block_by_number((block_number + 1).into(), false)
@@ -132,25 +123,6 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
     // TODO: check that the computed state_root matches the next_block.header.state_root
 
     let sp1_input = provider_db.get_sp1_input(&prev_block, &block).await;
-
-    println!("Instantiating WitnessDb from SP1Input...");
-    // This code will be the code that runs inside the zkVM.
-    let witness_db_inner = WitnessDb::new(sp1_input.clone());
-    let witness_db = CacheDB::new(witness_db_inner);
-    println!("Executing block with witness db...");
-    let executor = reth_node_ethereum::EthExecutorProvider::ethereum(chain_spec.clone().into())
-        .executor(witness_db);
-    let BlockExecutionOutput { state, receipts, .. } = executor.execute(
-        (
-            &block
-                .clone()
-                .with_recovered_senders()
-                .ok_or(BlockValidationError::SenderRecoveryError)?,
-            (merkle_block_td + block.header.difficulty).into(),
-        )
-            .into(),
-    )?;
-    println!("Done processing block!");
 
     Ok(sp1_input.clone())
 }
@@ -170,13 +142,10 @@ fn verify_stf(sp1_input: SP1Input) -> eyre::Result<()> {
     let block = sp1_input.block.clone();
     let merkle_block_td = U256::from(0); // TODO: this should be an input?
 
+    println!("Instantiating WitnessDb from SP1Input...");
     let witness_db_inner = WitnessDb::new(sp1_input.clone());
     let witness_db = CacheDB::new(witness_db_inner);
-
-    // let provider_db = RpcDb::new(provider.clone(), (block_number - 1).into());
-    // let db = CacheDB::new(provider_db.clone());
-    // let check_db =
-    //     witness_db::CheckDb { witness: witness_db.clone(), rpc: RpcDb::new(provider_db) };
+    println!("Executing block with witness db...");
 
     // TODO: can we import `EthExecutorProvider` from reth-evm instead of reth-node-ethereum?
     let executor = reth_node_ethereum::EthExecutorProvider::ethereum(chain_spec.clone().into())
@@ -191,6 +160,7 @@ fn verify_stf(sp1_input: SP1Input) -> eyre::Result<()> {
         )
             .into(),
     )?;
+    println!("Done processing block!");
     let block_state = BundleStateWithReceipts::new(
         state,
         Receipts::from_block_receipt(receipts),

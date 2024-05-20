@@ -1,4 +1,3 @@
-use async_std::task;
 use futures::future::join_all;
 use std::sync::{Arc, RwLock};
 
@@ -12,7 +11,7 @@ use reth_provider::ProviderError;
 use reth_revm::DatabaseRef;
 use revm_primitives::{AccountInfo, Bytecode, HashMap, HashSet};
 
-use crate::{cache::CachedProvider, FullAccountProof, RethBlock, SP1Input};
+use crate::{FullAccountProof, RethBlock, SP1Input};
 
 fn convert_proof(proof: EIP1186AccountProofResponse) -> AccountProof {
     let address = proof.address;
