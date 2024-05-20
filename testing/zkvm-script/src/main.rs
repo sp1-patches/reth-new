@@ -2,10 +2,7 @@
 pub mod provider_db;
 pub mod witness;
 
-use crate::{
-    provider_db::RpcDb,
-    witness::{CheckDb, WitnessDb},
-};
+use crate::{provider_db::RpcDb, witness::WitnessDb};
 
 use alloy_rpc_types::{Block, BlockId, EIP1186AccountProofResponse};
 use ethers_providers::{Http, Middleware, Provider};
@@ -124,26 +121,9 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
 
     let sp1_input = provider_db.get_sp1_input(&block).await;
 
-    // println!("Got address_to_storage: {:?}", address_to_storage);
-
-    // let sp1_input = SP1Input {
-    //     block: block.clone(),
-    //     merkle_proofs: merkle_proofs.clone(),
-    //     address_to_account_info: provider_db.address_to_account_info.read().unwrap().clone(),
-    //     address_to_storage: address_to_storage.clone(),
-    //     block_hashes: provider_db.block_hashes.read().unwrap().clone(),
-    //     code: code.clone(),
-    // };
-
-    // Now we do the check
+    // This code will be the code that runs inside the zkVM.
     let witness_db_inner = WitnessDb::new(sp1_input.clone());
     let witness_db = CacheDB::new(witness_db_inner);
-
-    // let address: Address = "0xCb2286d9471cc185281c4f763d34A962ED212962".parse().unwrap();
-    // let index = U256::from(7);
-    // let result = witness_db.storage(address, index);
-
-    // let check_db = CheckDb { witness: witness_db, rpc: db };
 
     let executor = reth_node_ethereum::EthExecutorProvider::ethereum(chain_spec.clone().into())
         .executor(witness_db);
