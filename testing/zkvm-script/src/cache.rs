@@ -3,8 +3,9 @@ use alloy_rpc_types::{Block, BlockId, EIP1186AccountProofResponse};
 use futures::Future;
 use reth_primitives::{
     trie::{AccountProof, StorageProof},
-    Account, Address, StorageKey, B256, U256, U64,
+    Account, Address, BlockNumberOrTag, StorageKey, B256, U256, U64,
 };
+use reth_provider::ProviderError;
 use revm_primitives::Bytes;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -15,7 +16,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CachedProvider {
     provider: ReqwestProvider,
     cache: Arc<RwLock<HashMap<String, serde_json::Value>>>,
@@ -76,10 +77,10 @@ impl CachedProvider {
         address: Address,
         storage_keys: Vec<StorageKey>,
         block_id: BlockId,
-    ) -> EIP1186AccountProofResponse {
+    ) -> Result<EIP1186AccountProofResponse, ProviderError> {
         let key = format!("get_proof_{:?}_{:?}_{:?}", address, storage_keys, block_id);
         if let Some(cached) = self.load_from_cache(&key) {
-            return cached;
+            return Ok(cached);
         }
         let proof = self
             .provider
@@ -88,13 +89,17 @@ impl CachedProvider {
             .await
             .expect("Failed to get proof");
         self.save_to_cache(&key, &proof);
-        proof
+        Ok(proof)
     }
 
-    pub async fn get_code_at(&self, address: Address, block_id: BlockId) -> Bytes {
+    pub async fn get_code_at(
+        &self,
+        address: Address,
+        block_id: BlockId,
+    ) -> Result<Bytes, ProviderError> {
         let key = format!("get_code_at_{:?}_{:?}", address, block_id);
         if let Some(cached) = self.load_from_cache(&key) {
-            return cached;
+            return Ok(cached);
         }
         let code = self
             .provider
@@ -103,13 +108,19 @@ impl CachedProvider {
             .await
             .expect("Failed to get code");
         self.save_to_cache(&key, &code);
-        code
+        Ok(code)
     }
 
-    pub async fn get_storage_at(&self, address: Address, index: U256, block_id: BlockId) -> U256 {
+    pub async fn get_storage_at(
+        &self,
+        address: Address,
+        index: U256,
+        block_id: BlockId,
+    ) -> Result<U256, ProviderError> {
         let key = format!("get_storage_at_{:?}_{:?}_{:?}", address, index, block_id);
         if let Some(cached) = self.load_from_cache(&key) {
-            return cached;
+            println!("Loaded from cache for get_storage_at");
+            return Ok(cached);
         }
         let storage = self
             .provider
@@ -118,13 +129,17 @@ impl CachedProvider {
             .await
             .expect("Failed to get storage");
         self.save_to_cache(&key, &storage);
-        storage
+        Ok(storage)
     }
 
-    pub async fn get_block_by_number(&self, number: U64, full: bool) -> Option<Block> {
+    pub async fn get_block_by_number(
+        &self,
+        number: BlockNumberOrTag,
+        full: bool,
+    ) -> Result<Option<Block>, ProviderError> {
         let key = format!("get_block_by_number_{:?}_{:?}", number, full);
         if let Some(cached) = self.load_from_cache(&key) {
-            return cached;
+            return Ok(cached);
         }
         let block = self
             .provider
@@ -132,6 +147,6 @@ impl CachedProvider {
             .await
             .expect("Failed to get block");
         self.save_to_cache(&key, &block);
-        block
+        Ok(block)
     }
 }

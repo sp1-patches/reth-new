@@ -13,7 +13,7 @@ pub(crate) struct WitnessDb {
 
 impl WitnessDb {
     pub(crate) fn new(sp1_input: SP1Input) -> Self {
-        let state_root: B256 = sp1_input.block.state_root.into();
+        let state_root: B256 = sp1_input.prev_block.state_root.into();
         let mut address_to_account_info = HashMap::new();
         let mut address_to_storage = HashMap::new();
 

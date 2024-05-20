@@ -4,7 +4,7 @@ pub mod provider_db;
 pub mod witness;
 use async_std::task;
 
-use crate::{provider_db::RpcDb, witness::WitnessDb};
+use crate::{cache::CachedProvider, provider_db::RpcDb, witness::WitnessDb};
 
 use eyre::Ok;
 use reth_evm::execute::{BlockExecutionOutput, BlockExecutorProvider, Executor};
@@ -20,6 +20,8 @@ use url::Url;
 #[derive(Debug, Clone)]
 /// A struct that holds the input for a zkVM program to execute a block.
 pub struct SP1Input {
+    /// The previous block.
+    pub prev_block: RethBlock,
     /// The block that will be executed inside the zkVM program.
     pub block: RethBlock,
     /// Address to merkle proofs.
@@ -76,14 +78,26 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
         )
         .shanghai_activated()
         .build();
-    let provider_db = RpcDb::new(provider.clone(), (block_number - 1).into());
+    // let cache_provider = CachedProvider::new(provider, "cache.json".into());
+
+    let prev_alloy_block = provider
+        .get_block_by_number((block_number - 1).into(), true)
+        .await?
+        .ok_or(eyre::eyre!("prev_block not found"))?;
+    let prev_block = RethBlock::try_from(prev_alloy_block)?;
+    let prev_state_root = prev_block.header.state_root;
+
+    let cache_provider = provider.clone();
+    let provider_db =
+        RpcDb::new(cache_provider.clone(), (block_number - 1).into(), prev_state_root.into());
     // The reason we can clone the provider_db is all the stateful elements are within Arcs.
     let db = CacheDB::new(provider_db.clone());
 
-    let address: Address = "0xdf02e18bb7fb735f5b1354400b16aeb19690627d".parse().unwrap();
+    let address: Address = "0x4e68ccd3e89f51c3074ca5072bbac773960dfa36".parse().unwrap();
     let account = task::block_on(provider_db.fetch_account_info(address));
     // let account = provider_db.fetch_account_info(address).await;
     println!("Account: {:?}", account);
+    // cache_provider.save();
 
     println!("Executing block with provider db...");
     let executor =
@@ -104,11 +118,12 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
         block.header.number,
     );
     println!("Done processing block!");
+    // cache_provider.save();
 
-    let _next_block = provider
-        .get_block_by_number((block_number + 1).into(), false)
-        .await?
-        .ok_or(eyre::eyre!("next_block not found"))?;
+    // let _next_block = provider
+    //     .get_block_by_number((block_number + 1).into(), false)
+    //     .await?
+    //     .ok_or(eyre::eyre!("next_block not found"))?;
 
     // TODO: how do we compute the new state root here? Is there a way to do this incrementally?
     // // Unpacked `BundleState::state_root_slow` function
@@ -116,7 +131,7 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
     //     block_state.hash_state_slow().state_root_with_updates(provider.tx_ref())?;
     // TODO: check that the computed state_root matches the next_block.header.state_root
 
-    let sp1_input = provider_db.get_sp1_input(&block).await;
+    let sp1_input = provider_db.get_sp1_input(&prev_block, &block).await;
 
     println!("Instantiating WitnessDb from SP1Input...");
     // This code will be the code that runs inside the zkVM.

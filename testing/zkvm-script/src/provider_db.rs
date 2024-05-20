@@ -12,7 +12,7 @@ use reth_provider::ProviderError;
 use reth_revm::DatabaseRef;
 use revm_primitives::{AccountInfo, Bytecode, HashMap, HashSet};
 
-use crate::{FullAccountProof, RethBlock, SP1Input};
+use crate::{cache::CachedProvider, FullAccountProof, RethBlock, SP1Input};
 
 fn convert_proof(proof: EIP1186AccountProofResponse) -> AccountProof {
     let address = proof.address;
@@ -48,7 +48,8 @@ pub struct RpcDb {
     pub provider: ReqwestProvider,
     /// The [`BlockId`] that will be used when fetching data from the RPC.
     pub block: BlockId,
-
+    /// The [`State`]
+    pub state_root: B256,
     /// A mapping from [`Address`] to [`AccountInfo`] for all addresses that have been fetched.
     pub address_to_account_info: Arc<RwLock<HashMap<Address, AccountInfo>>>,
     pub address_to_storage: Arc<RwLock<HashMap<Address, HashMap<U256, U256>>>>,
@@ -56,10 +57,11 @@ pub struct RpcDb {
 }
 
 impl RpcDb {
-    pub fn new(provider: ReqwestProvider, block: BlockId) -> Self {
+    pub fn new(provider: ReqwestProvider, block: BlockId, state_root: B256) -> Self {
         RpcDb {
             provider,
             block,
+            state_root,
             address_to_account_info: Arc::new(RwLock::new(HashMap::new())),
             address_to_storage: Arc::new(RwLock::new(HashMap::new())),
             block_hashes: Arc::new(RwLock::new(HashMap::new())),
@@ -94,6 +96,7 @@ impl RpcDb {
             code: Some(bytecode.clone()),
         };
         println!("Inserting into address_to_account_info...");
+
         // Keep track of the account_info and code in the mappings for RpcDb.
         self.address_to_account_info.write().unwrap().insert(address, account_info.clone());
         println!("Fetched");
@@ -155,8 +158,6 @@ impl RpcDb {
                     .unwrap_or_else(Vec::new);
 
                 let provider = self.provider.clone();
-                let block = self.block;
-
                 async move {
                     match provider.get_proof(*address, storage_keys).block_id(self.block).await {
                         Ok(proof) => Some((*address, proof)),
@@ -174,7 +175,7 @@ impl RpcDb {
     }
 
     /// Constructs an SP1Input from a block.
-    pub async fn get_sp1_input(&self, block: &RethBlock) -> SP1Input {
+    pub async fn get_sp1_input(&self, prev_block: &RethBlock, block: &RethBlock) -> SP1Input {
         println!("Constructing SP1Input for block {:?}...", block.header.number);
         let proofs = self.get_proofs().await;
         let address_to_account_info = self.address_to_account_info.read().unwrap();
@@ -188,7 +189,12 @@ impl RpcDb {
             })
             .collect();
         let block_hashes = self.block_hashes.read().unwrap().clone();
-        SP1Input { block: block.clone(), address_to_proof: converted_proofs, block_hashes }
+        SP1Input {
+            prev_block: prev_block.clone(),
+            block: block.clone(),
+            address_to_proof: converted_proofs,
+            block_hashes,
+        }
     }
 }
 
@@ -196,7 +202,14 @@ impl DatabaseRef for RpcDb {
     type Error = ProviderError;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        Ok(Some(task::block_on(self.fetch_account_info(address))))
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            Ok(Some(tokio::task::block_in_place(|| {
+                handle.block_on(self.fetch_account_info(address))
+            })))
+        } else {
+            panic!("No tokio runtime found");
+        }
+        // Ok(Some(task::block_on(self.fetch_account_info(address))))
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -204,10 +217,20 @@ impl DatabaseRef for RpcDb {
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        Ok(task::block_on(self.fetch_storage(address, index)))
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            Ok(tokio::task::block_in_place(|| handle.block_on(self.fetch_storage(address, index))))
+        } else {
+            panic!("No tokio runtime found");
+        }
+        // Ok(task::block_on(self.fetch_storage(address, index)))
     }
 
     fn block_hash_ref(&self, number: U256) -> Result<B256, Self::Error> {
-        Ok(task::block_on(self.fetch_block_hash(number)))
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            Ok(tokio::task::block_in_place(|| handle.block_on(self.fetch_block_hash(number))))
+        } else {
+            panic!("No tokio runtime found");
+        }
+        // Ok(task::block_on(self.fetch_block_hash(number)))
     }
 }
