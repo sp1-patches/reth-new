@@ -61,8 +61,6 @@ impl WitnessDb {
     }
 }
 
-// TODO: is there some automatic way to implement this?
-// TODO: fix all the dummy ProviderError
 impl DatabaseRef for WitnessDb {
     type Error = ProviderError;
 
@@ -71,7 +69,6 @@ impl DatabaseRef for WitnessDb {
         address: revm_primitives::Address,
     ) -> Result<Option<AccountInfo>, Self::Error> {
         Ok(self.address_to_account_info.get(&address).cloned())
-        // self.inner.basic_ref(address).map_err(|_| ProviderError::UnsupportedProvider)
     }
 
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -84,102 +81,77 @@ impl DatabaseRef for WitnessDb {
         index: U256,
     ) -> Result<U256, Self::Error> {
         Ok(self.address_to_storage.get(&address).unwrap().get(&index).unwrap().clone())
-        // self.inner.storage_ref(address, index).map_err(|_| ProviderError::UnsupportedProvider)
     }
 
     fn block_hash_ref(&self, number: U256) -> Result<B256, Self::Error> {
         Ok(self.block_hashes.get(&number).unwrap().clone())
-        // self.inner.block_hash_ref(number).map_err(|_| ProviderError::UnsupportedProvider)
-    }
-
-    // fn bas(
-    //     &mut self,
-    //     address: revm_primitives::Address,
-    // ) -> Result<Option<AccountInfo>, Self::Error> {
-    //     self.inner.basic(address).map_err(|_| ProviderError::UnsupportedProvider)
-    // }
-
-    // fn code_by_hash(&mut self, code_hash: B256) -> Result<revm_primitives::Bytecode, Self::Error>
-    // {     self.inner.code_by_hash(code_hash).map_err(|_| ProviderError::UnsupportedProvider)
-    // }
-
-    // fn storage(
-    //     &mut self,
-    //     address: revm_primitives::Address,
-    //     index: revm_primitives::U256,
-    // ) -> Result<revm_primitives::U256, Self::Error> {
-    //     self.inner.storage(address, index).map_err(|_| ProviderError::UnsupportedProvider)
-    // }
-
-    // fn block_hash(&mut self, number: revm_primitives::U256) -> Result<B256, Self::Error> {
-    //     self.inner.block_hash(number).map_err(|_| ProviderError::UnsupportedProvider)
-    // }
-}
-
-pub struct CheckDb {
-    pub witness: CacheDB<WitnessDb>,
-    pub rpc: CacheDB<RpcDb>,
-}
-
-impl Database for CheckDb {
-    type Error = ProviderError;
-
-    fn basic(
-        &mut self,
-        address: revm_primitives::Address,
-    ) -> Result<Option<AccountInfo>, Self::Error> {
-        let res1 = self.witness.basic(address).unwrap();
-        let res2 = self.rpc.basic(address).unwrap();
-        if res1 != res2 {
-            println!("basic mismatch for address {}", address);
-            println!("witness: {:?}", res1);
-            println!("rpc: {:?}", res2);
-            panic!("account mismatch");
-        }
-        self.rpc.basic(address)
-    }
-
-    fn code_by_hash(&mut self, code_hash: B256) -> Result<revm_primitives::Bytecode, Self::Error> {
-        let res1 = self.witness.code_by_hash(code_hash).unwrap();
-        let res2 = self.rpc.code_by_hash(code_hash).unwrap();
-        if res1 != res2 {
-            println!("code mismatch for hash {}", code_hash);
-            println!("witness: {:?}", res1);
-            println!("rpc: {:?}", res2);
-            panic!("code mismatch");
-        }
-        self.rpc.code_by_hash(code_hash)
-    }
-
-    fn storage(
-        &mut self,
-        address: revm_primitives::Address,
-        index: revm_primitives::U256,
-    ) -> Result<revm_primitives::U256, Self::Error> {
-        let index_b = B256::from(index);
-        let hash = keccak256(index_b);
-        let hash_b: U256 = B256::from(hash).into();
-        let res1 = self.witness.storage(address, hash_b).unwrap();
-        let res2 = self.rpc.storage(address, index).unwrap();
-        if res1 != res2 {
-            println!("storage mismatch for address {} index {}", address, index);
-            println!("witness: {:?}", res1);
-            println!("rpc: {:?}", res2);
-        } else {
-            println!("no storage mismatch for address {} index {}", address, index);
-        }
-        self.rpc.storage(address, index)
-    }
-
-    fn block_hash(&mut self, number: revm_primitives::U256) -> Result<B256, Self::Error> {
-        let res1 = self.witness.block_hash(number).unwrap();
-        let res2 = self.rpc.block_hash(number).unwrap();
-        if res1 != res2 {
-            println!("block hash mismatch for number {}", number);
-            println!("witness: {:?}", res1);
-            println!("rpc: {:?}", res2);
-            panic!("block_hash mismatch");
-        }
-        self.rpc.block_hash(number)
     }
 }
+
+// pub struct CheckDb {
+//     pub witness: CacheDB<WitnessDb>,
+//     pub rpc: CacheDB<RpcDb>,
+// }
+
+// impl Database for CheckDb {
+//     type Error = ProviderError;
+
+//     fn basic(
+//         &mut self,
+//         address: revm_primitives::Address,
+//     ) -> Result<Option<AccountInfo>, Self::Error> {
+//         let res1 = self.witness.basic(address).unwrap();
+//         let res2 = self.rpc.basic(address).unwrap();
+//         if res1 != res2 {
+//             println!("basic mismatch for address {}", address);
+//             println!("witness: {:?}", res1);
+//             println!("rpc: {:?}", res2);
+//             panic!("account mismatch");
+//         }
+//         self.rpc.basic(address)
+//     }
+
+//     fn code_by_hash(&mut self, code_hash: B256) -> Result<revm_primitives::Bytecode, Self::Error>
+// {         let res1 = self.witness.code_by_hash(code_hash).unwrap();
+//         let res2 = self.rpc.code_by_hash(code_hash).unwrap();
+//         if res1 != res2 {
+//             println!("code mismatch for hash {}", code_hash);
+//             println!("witness: {:?}", res1);
+//             println!("rpc: {:?}", res2);
+//             panic!("code mismatch");
+//         }
+//         self.rpc.code_by_hash(code_hash)
+//     }
+
+//     fn storage(
+//         &mut self,
+//         address: revm_primitives::Address,
+//         index: revm_primitives::U256,
+//     ) -> Result<revm_primitives::U256, Self::Error> {
+//         let index_b = B256::from(index);
+//         let hash = keccak256(index_b);
+//         let hash_b: U256 = B256::from(hash).into();
+//         let res1 = self.witness.storage(address, hash_b).unwrap();
+//         let res2 = self.rpc.storage(address, index).unwrap();
+//         if res1 != res2 {
+//             println!("storage mismatch for address {} index {}", address, index);
+//             println!("witness: {:?}", res1);
+//             println!("rpc: {:?}", res2);
+//         } else {
+//             println!("no storage mismatch for address {} index {}", address, index);
+//         }
+//         self.rpc.storage(address, index)
+//     }
+
+//     fn block_hash(&mut self, number: revm_primitives::U256) -> Result<B256, Self::Error> {
+//         let res1 = self.witness.block_hash(number).unwrap();
+//         let res2 = self.rpc.block_hash(number).unwrap();
+//         if res1 != res2 {
+//             println!("block hash mismatch for number {}", number);
+//             println!("witness: {:?}", res1);
+//             println!("rpc: {:?}", res2);
+//             panic!("block_hash mismatch");
+//         }
+//         self.rpc.block_hash(number)
+//     }
+// }
