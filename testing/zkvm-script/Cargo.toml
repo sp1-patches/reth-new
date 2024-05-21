@@ -17,6 +17,8 @@ reth-consensus.workspace = true
 reth-interfaces = { path = "../../crates/interfaces", default-features = false }
 reth-evm.workspace = true
 revm.workspace = true
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
 alloy-rpc-types.workspace = true
 alloy-provider = { workspace = true, features = ["reqwest"] }  
 alloy-transport-http.workspace = true

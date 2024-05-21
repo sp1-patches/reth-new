@@ -11269,7 +11269,9 @@ dependencies = [
 name = "zkvm-script"
 version = "0.2.0-beta.7"
 dependencies = [
+ "alloy-primitives",
  "alloy-provider",
+ "alloy-rlp",
  "alloy-rpc-types 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=64feb9b)",
  "alloy-transport 0.0.0-reserved",
  "alloy-transport-http",
