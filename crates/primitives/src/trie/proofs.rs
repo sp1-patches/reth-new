@@ -9,7 +9,7 @@ use alloy_rlp::encode_fixed_size;
 use alloy_trie::EMPTY_ROOT_HASH;
 
 /// The merkle proof with the relevant account info.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AccountProof {
     /// The address associated with the account.
     pub address: Address,
@@ -75,7 +75,7 @@ impl AccountProof {
 }
 
 /// The merkle proof of the storage entry.
-#[derive(PartialEq, Eq, Default, Debug, Clone)]
+#[derive(PartialEq, Eq, Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StorageProof {
     /// The raw storage key.
     pub key: B256,

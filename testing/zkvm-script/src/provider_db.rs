@@ -13,7 +13,7 @@ use revm_primitives::{AccountInfo, Bytecode, HashMap, HashSet};
 
 use crate::{FullAccountProof, RethBlock, SP1Input};
 
-fn convert_proof(proof: EIP1186AccountProofResponse) -> AccountProof {
+pub fn convert_proof(proof: EIP1186AccountProofResponse) -> AccountProof {
     let address = proof.address;
     let balance = proof.balance;
     let code_hash = proof.code_hash;

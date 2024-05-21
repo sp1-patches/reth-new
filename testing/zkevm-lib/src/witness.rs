@@ -1,10 +1,10 @@
 use crate::SP1Input;
+use reth_interfaces::provider::ProviderError;
 use reth_primitives::B256;
-use reth_provider::ProviderError;
 use revm::DatabaseRef;
 use revm_primitives::{AccountInfo, Address, Bytecode, HashMap, U256};
 
-pub(crate) struct WitnessDb {
+pub struct WitnessDb {
     pub address_to_account_info: HashMap<Address, AccountInfo>,
     pub address_to_storage: HashMap<Address, HashMap<U256, U256>>,
     pub block_hashes: HashMap<U256, B256>,
@@ -12,7 +12,7 @@ pub(crate) struct WitnessDb {
 }
 
 impl WitnessDb {
-    pub(crate) fn new(sp1_input: SP1Input) -> Self {
+    pub fn new(sp1_input: SP1Input) -> Self {
         let state_root: B256 = sp1_input.prev_block.state_root.into();
         let mut address_to_account_info = HashMap::new();
         let mut address_to_storage = HashMap::new();

@@ -22,4 +22,7 @@ ENV CARGO_BUILD_TARGET="riscv32im-succinct-zkvm-elf"
 ENV CC="gcc"
 ENV CC_riscv32im_succinct_zkvm_elf="/opt/riscv/bin/riscv32-unknown-elf-gcc -mstrict-align" 
 
+# Set the entrypoint to use bash so you can override the command later
+# ENTRYPOINT ["/bin/bash"]
+
 RUN cargo build -p zkvm-test --release --ignore-rust-version

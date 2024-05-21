@@ -1,12 +1,15 @@
 //! A simple script that has takes in a block & RPC, fetches the block.
 pub mod cache;
 pub mod provider_db;
-pub mod witness;
+// pub mod witness;
 
-use crate::{cache::CachedProvider, provider_db::RpcDb, witness::WitnessDb};
+pub use zkevm_lib::FullAccountProof;
+use zkevm_lib::{witness::WitnessDb, SP1Input};
+
+use crate::{cache::CachedProvider, provider_db::RpcDb};
 
 use alloy_primitives::Bytes;
-use alloy_provider::Provider;
+use alloy_provider::{Provider, Provider as AlloyProvider, ReqwestProvider};
 use alloy_rlp::{Decodable, Encodable};
 use eyre::Ok;
 use reth_evm::execute::{BlockExecutionOutput, BlockExecutorProvider, Executor};
@@ -23,44 +26,12 @@ use reth_provider::BundleStateWithReceipts;
 use reth_trie::{HashedPostState, HashedStorage};
 use revm::db::CacheDB;
 use revm_primitives::{keccak256, Bytecode, HashMap, U256};
+use sp1_sdk::{utils, ProverClient, SP1Stdin};
 use url::Url;
 
-#[derive(Debug, Clone)]
-/// A struct that holds the input for a zkVM program to execute a block.
-pub struct SP1Input {
-    /// The previous block.
-    pub prev_block: RethBlock,
-    /// The block that will be executed inside the zkVM program.
-    pub block: RethBlock,
-    /// Address to merkle proofs.
-    pub address_to_proof: HashMap<Address, FullAccountProof>,
-    /// Block number to block hash.
-    pub block_hashes: HashMap<U256, B256>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FullAccountProof {
-    account_proof: AccountProof,
-    code: Bytecode,
-}
-
-impl FullAccountProof {
-    fn verify(&self, state_root: B256) -> eyre::Result<()> {
-        self.account_proof.verify(state_root)?;
-        // Assert that the code hash matches the code.
-        // TODO: there is an optimization for EMPTY_CODE_HASH If the self.code is empty.
-        let code_hash = keccak256(self.code.bytes());
-        if self.account_proof.info.unwrap().bytecode_hash.unwrap() != code_hash {
-            return Err(eyre::eyre!("Code hash does not match the code"));
-        }
-        Ok(())
-    }
-}
+const ELF: &[u8] = include_bytes!("../../zkvm/elf/riscv32im-succinct-zkvm-elf");
 
 async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
-    // We put imports here that are not used in the zkVM program.
-    use alloy_provider::{Provider as AlloyProvider, ReqwestProvider};
-
     // Initialize a provider.
     let provider = ReqwestProvider::new_http(rpc_url);
     let merkle_block_td = U256::ZERO;
@@ -130,7 +101,10 @@ async fn get_input(block_number: u64, rpc_url: Url) -> eyre::Result<SP1Input> {
     // let (in_memory_state_root, in_memory_updates) =
     //     block_state.hash_state_slow().state_root_with_updates(provider.tx_ref())?;
 
-    let _state_root = update_state_root(&provider_db, &block_state).await?;
+    // let state_root = update_state_root(&provider_db, &block_state).await?;
+    // println!("state_root {:?}", state_root);
+    // println!("block.header.state_root {:?}", block.header.state_root);
+    // assert_eq!(state_root, block.header.state_root);
 
     // TODO: check that the computed state_root matches the next_block.header.state_root
 
@@ -179,7 +153,7 @@ async fn update_state_root(
         // TODO: calls should be parallelized
         let proof = provider_db
             .provider
-            .get_proof(*account_reverse_lookup.get(&hashed_address).unwrap(), storage_keys.clone())
+            .(get_proof)(*account_reverse_lookup.get(&hashed_address).unwrap(), storage_keys.clone())
             .await?;
 
         let storage_root = if proof.storage_proof.is_empty() {
@@ -293,59 +267,48 @@ fn update_hash_builder_from_proof(
     Ok(())
 }
 
-/// Program that verifies the STF, run inside the zkVM.
-fn verify_stf(sp1_input: SP1Input) -> eyre::Result<()> {
-    let chain_spec = ChainSpecBuilder::default()
-        .chain(MAINNET.chain)
-        .genesis(
-            serde_json::from_str(include_str!(
-                "../../../crates/ethereum/node/tests/assets/genesis.json"
-            ))
-            .unwrap(),
-        )
-        .shanghai_activated()
-        .build();
-    let block = sp1_input.block.clone();
-    let merkle_block_td = U256::from(0); // TODO: this should be an input?
-
-    println!("Instantiating WitnessDb from SP1Input...");
-    let witness_db_inner = WitnessDb::new(sp1_input.clone());
-    let witness_db = CacheDB::new(witness_db_inner);
-    println!("Executing block with witness db...");
-
-    // TODO: can we import `EthExecutorProvider` from reth-evm instead of reth-node-ethereum?
-    let executor = reth_node_ethereum::EthExecutorProvider::ethereum(chain_spec.clone().into())
-        .executor(witness_db);
-    let BlockExecutionOutput { state, receipts, .. } = executor.execute(
-        (
-            &block
-                .clone()
-                .with_recovered_senders()
-                .ok_or(BlockValidationError::SenderRecoveryError)?,
-            (merkle_block_td + block.header.difficulty).into(),
-        )
-            .into(),
-    )?;
-    println!("Done processing block!");
-    let block_state = BundleStateWithReceipts::new(
-        state,
-        Receipts::from_block_receipt(receipts),
-        block.header.number,
-    );
-
-    // TODO: either return or verify the resulting state root.
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() {
+    // Setup logging.
+    utils::setup_logger();
+
     let block_number = 18884864u64;
-    let rpc_url =
-        Url::parse("https://eth-mainnet.g.alchemy.com/v2/hIxcf_hqT9It2hS8iCFeHKklL8tNyXNF")
-            .expect("Invalid RPC URL");
-    println!("Fetching block number {} from {}", block_number, rpc_url);
-    // Get the input.
-    let sp1_input = get_input(block_number, rpc_url).await.expect("Failed to get input");
-    // Verify the STF.
-    verify_stf(sp1_input).expect("Failed to verify STF");
+    let file_path = format!("sp1_input_{}.json", block_number);
+
+    let sp1_input: Sp1Input;
+
+    if fs::try_exists(&file_path).await? {
+        // If the file path exists, then load sp1_input from the file.
+        let content = fs::read_to_string(&file_path).await?;
+        sp1_input = serde_json::from_str(&content)?;
+    } else {
+        // Otherwise, generate the sp1_input from the block by executing it.
+        let rpc_url =
+            Url::parse("https://eth-mainnet.g.alchemy.com/v2/hIxcf_hqT9It2hS8iCFeHKklL8tNyXNF")
+                .expect("Invalid RPC URL");
+        println!("Fetching block number {} from {}", block_number, rpc_url);
+
+        // Get the input.
+        sp1_input = get_input(block_number, rpc_url).await.expect("Failed to get input");
+
+        // Save the input to a file.
+        let serialized_input = serde_json::to_string(&sp1_input)?;
+        let mut file = File::create(&file_path).await?;
+        file.write_all(serialized_input.as_bytes()).await?;
+    }
+
+    // Verify the STF using SP1_input
+    sp1_input.verify_stf().expect("Failed to verify STF");
+
+    // Now generate the proof.
+    let mut stdin = SP1Stdin::new();
+    stdin.write(&n);
+
+    // Generate the proof for the given program and input.
+    let client = ProverClient::new();
+    let (pk, vk) = client.setup(ELF);
+    let mut proof = client.prove(&pk, stdin).unwrap();
+    println!("generated proof");
+    // Verify proof and public values
+    client.verify_compressed(&proof, &vk).expect("verification failed");
 }

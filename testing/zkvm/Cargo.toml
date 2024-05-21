@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 sp1-zkvm = { git = "https://github.com/succinctlabs/sp1.git", rev = "v1.0.0-testnet" }
 reth-primitives.workspace = true
-reth-consensus.workspace = true
-reth-interfaces.workspace = true
-reth-evm.workspace = true
+# reth-consensus.workspace = true
+# reth-interfaces.workspace = true
+# reth-evm.workspace = true
+# zkevm-lib = { path = "../zkevm-lib" }
