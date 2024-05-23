@@ -6,7 +6,7 @@ use crate::{
 };
 use reth_consensus::ConsensusError;
 use reth_fs_util::FsPathError;
-use reth_network_api::NetworkError;
+use reth_network_types::NetworkError;
 
 /// Result alias for [`RethError`].
 pub type RethResult<T> = Result<T, RethError>;

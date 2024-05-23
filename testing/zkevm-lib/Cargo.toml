@@ -1,0 +1,26 @@
+[package]
+name = "zkevm-lib"
+description = "Library methods that will be used in the zkEVM"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+reth-primitives = { path = "../../crates/primitives", default-features = false, features = ["alloy-compat"]}
+reth-consensus.workspace = true
+reth-interfaces = { path = "../../crates/interfaces", default-features = false }
+reth-evm.workspace = true
+revm.workspace = true
+reth-revm.workspace = true
+reth-node-ethereum.workspace = true
+revm-primitives.workspace = true
+eyre.workspace = true
+serde_json.workspace = true
+reth-trie.workspace = true
+serde.workspace = true

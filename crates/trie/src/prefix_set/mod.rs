@@ -133,7 +133,7 @@ impl PrefixSetMut {
 /// See also [PrefixSetMut::freeze].
 #[derive(Debug, Default, Clone)]
 pub struct PrefixSet {
-    keys: Arc<Vec<Nibbles>>,
+    pub keys: Arc<Vec<Nibbles>>,
     index: usize,
 }
 

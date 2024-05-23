@@ -1024,7 +1024,7 @@ impl From<Genesis> for ChainSpec {
         let time_hardfork_opts = [
             (Hardfork::Shanghai, genesis.config.shanghai_time),
             (Hardfork::Cancun, genesis.config.cancun_time),
-            (Hardfork::Prague, genesis.config.prague_time),
+            (Hardfork::Prague, genesis.config.cancun_time),
             #[cfg(feature = "optimism")]
             (Hardfork::Regolith, optimism_genesis_info.regolith_time),
             #[cfg(feature = "optimism")]
@@ -2992,7 +2992,7 @@ Post-merge hard forks (timestamp based):
         // assert that the cancun time was picked up
         assert_eq!(genesis.config.cancun_time, Some(4661));
         // assert that the prague time was picked up
-        assert_eq!(genesis.config.prague_time, Some(4662));
+        assert_eq!(genesis.config.cancun_time, Some(4662));
     }
 
     #[test]

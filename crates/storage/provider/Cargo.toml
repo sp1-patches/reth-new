@@ -15,7 +15,7 @@ workspace = true
 # reth
 reth-primitives.workspace = true
 reth-fs-util.workspace = true
-reth-interfaces.workspace = true
+reth-interfaces = { workspace = true, features = ["p2p"] }
 reth-db.workspace = true
 reth-trie = { workspace = true, features = ["metrics"] }
 reth-nippy-jar.workspace = true

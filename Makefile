@@ -474,3 +474,9 @@ pr:
 	make lint && \
 	make update-book-cli && \
 	make test
+
+sp1:
+	docker build -t sp1-zkvm-test -f Dockerfile.zkvm .
+
+sp1-run:
+	docker run --rm -it sp1-zkvm-test cargo build -p zkvm-test --release --ignore-rust-version
