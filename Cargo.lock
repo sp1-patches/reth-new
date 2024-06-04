@@ -637,9 +637,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-trie"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d55bd16fdb7ff4bd74cc4c878eeac7e8a27c0d7ba9df4ab58d9310aaafb62d43"
+checksum = "03704f265cbbb943b117ecb5055fd46e8f41e7dc8a58b1aed20bcd40ace38c15"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -651,6 +651,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "serde",
+ "smallvec",
  "tracing",
 ]
 
@@ -11279,6 +11280,7 @@ dependencies = [
  "ethers-providers",
  "eyre",
  "futures",
+ "itertools 0.12.1",
  "reth-consensus",
  "reth-evm",
  "reth-interfaces",
@@ -11291,6 +11293,7 @@ dependencies = [
  "revm-primitives",
  "serde",
  "serde_json",
+ "similar-asserts",
  "tokio",
  "url",
 ]
