@@ -3,12 +3,16 @@ pub mod cache;
 pub mod provider_db;
 pub mod witness;
 
+use std::collections::{BTreeMap, HashSet};
+
 use crate::{provider_db::RpcDb, witness::WitnessDb};
 
 use alloy_primitives::Bytes;
 use alloy_provider::Provider;
 use alloy_rlp::{Decodable, Encodable};
 use eyre::Ok;
+use futures::stream::FuturesUnordered;
+use itertools::Either;
 use reth_evm::execute::{BlockExecutionOutput, BlockExecutorProvider, Executor};
 use reth_interfaces::executor::BlockValidationError;
 use reth_primitives::{
@@ -145,61 +149,53 @@ async fn update_state_root(
     let mut storage_reverse_lookup = HashMap::<B256, B256>::default();
     let mut hashed_state = HashedPostState::default();
 
+    let proof_futs = FuturesUnordered::default();
     // Reconstruct prefix sets manually to record pre-images for subsequent lookups
     for (address, account) in block_state.bundle_accounts_iter() {
         let hashed_address = keccak256(address);
         account_reverse_lookup.insert(hashed_address, address);
         hashed_state.accounts.insert(hashed_address, account.info.clone().map(into_reth_acc));
 
+        let mut storage_keys = Vec::new();
         let mut hashed_storage = HashedStorage::new(account.status.was_destroyed());
         for (key, value) in &account.storage {
             let slot = B256::new(key.to_be_bytes());
             let hashed_slot = keccak256(&slot);
+            storage_keys.push(slot);
             storage_reverse_lookup.insert(hashed_slot, slot);
             hashed_storage.storage.insert(hashed_slot, value.present_value);
         }
         hashed_state.storages.insert(hashed_address, hashed_storage);
+
+        let provider = provider_db.provider.clone();
+        proof_futs.push(Box::pin(async move {
+            provider.get_proof(address, storage_keys).block_id(provider_db.block).await
+        }));
     }
 
-    let mut rlp_buf = Vec::with_capacity(128);
+    let proof_responses: Vec<_> = futures::TryStreamExt::try_collect(proof_futs).await?;
 
-    let mut prefix_sets = hashed_state.construct_prefix_sets();
-    let mut hash_builder = HashBuilder::default();
-    let mut account_prefix_set_iter =
-        prefix_sets.account_prefix_set.keys.as_ref().iter().peekable();
-    while let Some(account_nibbles) = account_prefix_set_iter.next() {
+    let prefix_sets = hashed_state.construct_prefix_sets();
+
+    let mut storage_roots = HashMap::<B256, B256>::default();
+    for account_nibbles in prefix_sets.account_prefix_set.keys.as_ref() {
         let hashed_address = B256::from_slice(&account_nibbles.pack());
         let address = *account_reverse_lookup.get(&hashed_address).unwrap();
         let storage_prefix_sets =
-            prefix_sets.storage_prefix_sets.remove(&hashed_address).unwrap_or_default();
-        let storage_keys = storage_prefix_sets
-            .keys
-            .iter()
-            .map(|nibbles| *storage_reverse_lookup.get(&B256::from_slice(&nibbles.pack())).unwrap())
-            .collect::<Vec<_>>();
+            prefix_sets.storage_prefix_sets.get(&hashed_address).cloned().unwrap_or_default();
 
-        // TODO: calls should be parallelized
-        let proof = provider_db
-            .provider
-            .get_proof(address, storage_keys.clone())
-            .block_id(provider_db.block)
-            .await?;
+        let proof = proof_responses.iter().find(|x| x.address == address).unwrap();
 
-        let storage_root = if proof.storage_proof.is_empty() {
+        let root = if proof.storage_proof.is_empty() {
             proof.storage_hash
         } else {
-            let mut storage_hash_builder = HashBuilder::default();
-            let mut storage_prefix_set_iter = storage_prefix_sets.keys.as_ref().iter().peekable();
-            while let Some(storage_nibbles) = storage_prefix_set_iter.next() {
-                let hashed_slot = B256::from_slice(&storage_nibbles.pack());
-                let slot = storage_reverse_lookup.get(&hashed_slot).unwrap();
-                let proof = proof.storage_proof.iter().find(|p| &p.key.0 == slot).unwrap();
-                update_hash_builder_from_proof(
-                    &mut storage_hash_builder,
-                    &proof.proof,
-                    Nibbles::default(),
-                    storage_nibbles,
-                    Some(
+            compute_root_from_proofs(storage_prefix_sets.keys.as_ref().iter().map(
+                |storage_nibbles| {
+                    let hashed_slot = B256::from_slice(&storage_nibbles.pack());
+                    let slot = storage_reverse_lookup.get(&hashed_slot).unwrap();
+                    let storage_proof =
+                        proof.storage_proof.iter().find(|x| &x.key.0 == slot).unwrap();
+                    let encoded = Some(
                         hashed_state
                             .storages
                             .get(&hashed_address)
@@ -207,119 +203,118 @@ async fn update_state_root(
                             .unwrap_or_default(),
                     )
                     .filter(|v| !v.is_zero())
-                    .map(|v| alloy_rlp::encode_fixed_size(&v).to_vec()),
-                    storage_prefix_set_iter.peek().copied(),
-                )?;
-            }
-            storage_hash_builder.root()
+                    .map(|v| alloy_rlp::encode_fixed_size(&v).to_vec());
+                    (storage_nibbles.clone(), encoded, storage_proof.proof.clone())
+                },
+            ))?
         };
-
-        let account = hashed_state.accounts.get(&hashed_address).unwrap().unwrap_or_default();
-        let encoded = if account.is_empty() && storage_root == EMPTY_ROOT_HASH {
-            None
-        } else {
-            rlp_buf.clear();
-            TrieAccount::from((account, storage_root)).encode(&mut rlp_buf);
-            Some(rlp_buf.clone())
-        };
-
-        update_hash_builder_from_proof(
-            &mut hash_builder,
-            &proof.account_proof[..],
-            Nibbles::default(),
-            &account_nibbles,
-            encoded,
-            account_prefix_set_iter.peek().copied(),
-        )?;
+        storage_roots.insert(hashed_address, root);
     }
 
-    Ok(hash_builder.root())
+    let mut rlp_buf = Vec::with_capacity(128);
+
+    compute_root_from_proofs(prefix_sets.account_prefix_set.keys.as_ref().iter().map(
+        |account_nibbles| {
+            let hashed_address = B256::from_slice(&account_nibbles.pack());
+            let address = *account_reverse_lookup.get(&hashed_address).unwrap();
+            let proof = proof_responses.iter().find(|x| x.address == address).unwrap();
+
+            let storage_root = *storage_roots.get(&hashed_address).unwrap();
+
+            let account = hashed_state.accounts.get(&hashed_address).unwrap().unwrap_or_default();
+            let encoded = if account.is_empty() && storage_root == EMPTY_ROOT_HASH {
+                None
+            } else {
+                rlp_buf.clear();
+                TrieAccount::from((account, storage_root)).encode(&mut rlp_buf);
+                Some(rlp_buf.clone())
+            };
+            (account_nibbles.clone(), encoded, proof.account_proof.clone())
+        },
+    ))
 }
 
-fn update_hash_builder_from_proof(
-    hash_builder: &mut HashBuilder,
-    proof: &[Bytes],
-    current_key: Nibbles,
-    key: &Nibbles,
-    value: Option<Vec<u8>>,
-    next: Option<&Nibbles>,
-) -> eyre::Result<()> {
-    let Some(node) = proof.first() else {
-        // Add leaf node if any
-        if let Some(value) = &value {
-            hash_builder.add_leaf(key.clone(), value);
+fn compute_root_from_proofs(
+    items: impl IntoIterator<Item = (Nibbles, Option<Vec<u8>>, Vec<Bytes>)>,
+) -> eyre::Result<B256> {
+    let mut trie_nodes = BTreeMap::default();
+
+    for (key, value, proof) in items {
+        let mut path = Nibbles::default();
+        for encoded in proof {
+            let mut next_path = path.clone();
+            match TrieNode::decode(&mut &encoded[..])? {
+                TrieNode::Branch(branch) => {
+                    next_path.push(key[path.len()]);
+                    let mut stack_ptr = branch.as_ref().first_child_index();
+                    for index in CHILD_INDEX_RANGE {
+                        let mut branch_child_path = path.clone();
+                        branch_child_path.push(index);
+
+                        if branch.state_mask.is_bit_set(index) {
+                            if !key.starts_with(&branch_child_path) {
+                                trie_nodes.insert(
+                                    branch_child_path,
+                                    Either::Left(B256::from_slice(&branch.stack[stack_ptr][1..])),
+                                );
+                            }
+                            stack_ptr += 1;
+                        }
+                    }
+                }
+                TrieNode::Extension(extension) => {
+                    next_path.extend_from_slice(&extension.key);
+                }
+                TrieNode::Leaf(leaf) => {
+                    next_path.extend_from_slice(&leaf.key);
+                    if next_path != key {
+                        trie_nodes.insert(next_path.clone(), Either::Right(leaf.value.clone()));
+                    }
+                }
+            };
+            path = next_path;
         }
-        return Ok(())
-    };
 
-    match TrieNode::decode(&mut &node[..])? {
-        TrieNode::Branch(branch) => {
-            let mut stack_ptr = branch.as_ref().first_child_index();
-            for index in CHILD_INDEX_RANGE {
-                let mut updated_key = current_key.clone();
-                updated_key.push(index);
+        if let Some(value) = value {
+            trie_nodes.insert(key, Either::Right(value));
+        }
+    }
 
-                let state_mask_bit_set = branch.state_mask.is_bit_set(index);
+    // ignore branch child hashes in the path of leaves
+    // or lower child hashes
+    let mut keys = trie_nodes.keys().peekable();
+    let mut ignored_keys = HashSet::<Nibbles>::default();
+    while let Some(key) = keys.next() {
+        if keys.peek().map_or(false, |next| next.starts_with(&key)) {
+            ignored_keys.insert(key.clone());
+        }
+    }
 
-                if key.starts_with(&updated_key) {
-                    update_hash_builder_from_proof(
-                        hash_builder,
-                        if proof.len() != 0 { &proof[1..] } else { &[] },
-                        updated_key,
-                        key,
-                        value.clone(),
-                        next,
-                    )?;
-                } else if state_mask_bit_set &&
-                    updated_key > hash_builder.key &&
-                    next.map_or(true, |n| &updated_key < n && !n.starts_with(&updated_key))
+    let mut hash_builder = HashBuilder::default();
+    let mut trie_nodes =
+        trie_nodes.into_iter().filter(|(path, _)| !ignored_keys.contains(path)).peekable();
+    while let Some((path, value)) = trie_nodes.next() {
+        match value {
+            Either::Left(branch_hash) => {
+                let parent_branch_path = path.slice(..path.len() - 1);
+                if hash_builder.key.starts_with(&parent_branch_path) ||
+                    trie_nodes
+                        .peek()
+                        .map_or(false, |next| next.0.starts_with(&parent_branch_path))
                 {
-                    hash_builder.add_branch(
-                        updated_key,
-                        // proofs can only contain hashes
-                        B256::from_slice(&branch.stack[stack_ptr][1..]),
-                        false,
-                    );
-                }
-
-                if state_mask_bit_set {
-                    stack_ptr += 1;
+                    hash_builder.add_branch(path, branch_hash, false);
+                } else {
+                    // parent is a branch node that needs to be turned into extension
+                    todo!()
                 }
             }
-        }
-
-        TrieNode::Extension(extension) => {
-            let mut updated_key = current_key.clone();
-            updated_key.extend_from_slice(&extension.key);
-            update_hash_builder_from_proof(
-                hash_builder,
-                if proof.len() == 0 { &[] } else { &proof[1..] },
-                updated_key,
-                key,
-                value.clone(),
-                next,
-            )?;
-        }
-        TrieNode::Leaf(leaf) => {
-            let mut updated_key = current_key.clone();
-            updated_key.extend_from_slice(&leaf.key);
-
-            // Add current leaf node and supplied if any
-            let mut leaves = Vec::new();
-            if &updated_key != key {
-                leaves.push((updated_key, &leaf.value));
-            }
-            if let Some(value) = &value {
-                leaves.push((key.clone(), &value));
-            }
-            leaves.sort_unstable_by_key(|(key, _)| key.clone());
-            for (nibbles, value) in leaves {
-                hash_builder.add_leaf(nibbles, value);
+            Either::Right(leaf_value) => {
+                hash_builder.add_leaf(path, &leaf_value);
             }
         }
-    };
-
-    Ok(())
+    }
+    let root = hash_builder.root();
+    Ok(root)
 }
 
 /// Program that verifies the STF, run inside the zkVM.
