@@ -363,7 +363,7 @@ fn verify_stf(sp1_input: SP1Input) -> eyre::Result<()> {
 
 #[tokio::main]
 async fn main() {
-    let block_number = 18884865u64;
+    let block_number = 18884864u64;
     let rpc_url =
         Url::parse("https://eth-mainnet.g.alchemy.com/v2/hIxcf_hqT9It2hS8iCFeHKklL8tNyXNF")
             .expect("Invalid RPC URL");
